@@ -5,7 +5,15 @@
 #include <list.h>
 #include <stdint.h>
 
-#include "synch.h"
+/* Project 3 */
+#include "threads/synch.h"
+
+// #include "synch.h"
+
+#ifdef USERPROG
+/* Project 3 */
+extern bool thread_prior_aging;
+#endif
 
 #define MAX_FD 128
 
