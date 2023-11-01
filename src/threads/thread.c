@@ -15,6 +15,9 @@
 #include "userprog/process.h"
 #endif
 
+/* Project 3 */
+#include "threads/fixed-point.h"
+
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
@@ -81,6 +84,8 @@ struct thread *searchChild(tid_t child_tid);
 
 /* Project 3 */
 void thread_aging();
+static struct list sleep_list;
+static int load_avg;
 
 
 /* Initializes the threading system by transforming the code
@@ -110,6 +115,11 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+
+  /* Project 3 */
+  /* Init load_avg */
+  list_init(&sleep_list);
+  load_avg = 0;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -145,6 +155,10 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
+
+  /* Project 3 */
+  /* RUNNING thread's recent_cpu + 1 */
+  running_thread()->recent_cpu++;  
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -206,6 +220,10 @@ thread_create (const char *name, int priority,
 
   /* Set parent process */
   t->parent = cur;
+
+  /* Set nice and recent_cpu value */
+  t->nice = cur->nice;
+  t->recent_cpu = cur->recent_cpu;
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -376,22 +394,24 @@ thread_get_priority (void)
   return thread_current ()->priority;
 }
 
-/* Sets the current thread's nice value to NICE. */
+/* Sets the current thread's nice value to NICE. 
+   Recalculate the thread's priority based on the new nice value */
 void
 thread_set_nice (int nice UNUSED) 
 {
-  /* Not yet implemented. */
+  thread_current()->nice = nice;
+  cal_priority(thread_current());
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
-/* Returns 100 times the system load average. */
+/* Returns 100 times the system load average. 
+   Rounded up to the nearest integer */
 int
 thread_get_load_avg (void) 
 {
@@ -399,7 +419,8 @@ thread_get_load_avg (void)
   return 0;
 }
 
-/* Returns 100 times the current thread's recent_cpu value. */
+/* Returns 100 times the current thread's recent_cpu value.
+   Rounded up to the nearest integer */
 int
 thread_get_recent_cpu (void) 
 {
@@ -407,6 +428,64 @@ thread_get_recent_cpu (void)
   return 0;
 }
 
+
+/* Project 3 */
+/* Sleeping threads */
+void thread_sleep(int64_t ticks) {
+  struct thread *cur = thread_current();
+  enum intr_level old_level;
+
+  old_level = intr_disable();
+
+  cur->sleep_time = ticks;
+
+  list_push_back(&sleep_list, &cur->elem);
+  thread_block();
+
+  intr_set_level(old_level);
+}
+/* Wake up sleeping thread */
+void thread_wake(int64_t ticks) {
+  struct thread *cur = thread_current();
+  struct list_elem *e;
+  for(e = list_begin(&sleep_list);
+      e != list_end(&sleep_list);
+      ) {
+        struct thread *tmp = list_entry(e, struct thread, elem);
+        /* Check time to wake up */
+        if(tmp->sleep_time <= ticks) {
+          e = list_remove(&tmp->elem);
+          thread_unblock(tmp);
+        }
+        else {
+          e = list_next(e);
+        }
+      }
+}
+/* Calculate priority */
+void cal_priority_all() {
+  struct list_elem *e;
+  for(e = list_begin(&all_list);
+      e != list_end(&all_list);
+      e = list_next(e))
+      {
+        struct thread *tmp = list_entry(e, struct thread, elem);
+        cal_priority(tmp);
+      }
+}
+void cal_priority(struct thread * t) {
+  t->priority = PRI_MAX + (t->recent_cpu / 4) - (t->nice * 2);
+}
+/* Calculate recent_cpu */
+void cal_recent_cpu() {
+  struct thread *cur;
+  cur->recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * cur->recent_cpu + cur->nice;
+}
+/* Calculate load_avg */
+void cal_load_avg() {
+  load_avg = (59 / 60) * load_avg + (1 / 60) * list_size(&ready_list);
+}
+
 /* Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread is initially put on the ready list by

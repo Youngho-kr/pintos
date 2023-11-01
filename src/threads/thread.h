@@ -126,6 +126,11 @@ struct thread
 
     struct file *fd[MAX_FD];            /* File descriptor */
 
+    /* Proj 3 */
+    int sleep_time;                     /* Tick arrives sleep_time, wake up */
+    int nice;                           /* Calculate priority */
+    int recent_cpu;                     /* Calculate priority */
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -165,5 +170,16 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+/* Project 1 */
+struct thread *searchChild(tid_t child_tid);
+
+/* Project 3 */
+void thread_sleep(int64_t ticks);
+void thread_wake(int64_t ticks);
+void cal_priority_all();
+void cal_priority();
+void cal_recent_cpu();
+void cal_load_avg();
 
 #endif /* threads/thread.h */
