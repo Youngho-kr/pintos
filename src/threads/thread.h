@@ -10,7 +10,7 @@
 
 // #include "synch.h"
 
-#ifdef USERPROG
+#ifndef USERPROG
 /* Project 3 */
 extern bool thread_prior_aging;
 #endif

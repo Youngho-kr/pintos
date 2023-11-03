@@ -57,7 +57,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
-#ifdef USERPROG
+#ifndef USERPROG
 /* Project 3 */
 bool thread_prior_aging;
 #endif
@@ -164,9 +164,10 @@ thread_tick (void)
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
 
-  #ifdef USERPROG
+  #ifndef USERPROG
   /* Proejct 3 */
   // thread_wake_up(); 
+
   if (thread_prior_aging == true)
     thread_aging ();
   #endif
