@@ -177,10 +177,10 @@ timer_interrupt (struct intr_frame *args UNUSED)
   /* Wake up threads time to wake up */
   thread_wake (ticks);
 
-  // /* Recalculate prioirty */
-  // if(ticks % 4 == 0) {
-  //   cal_priority_all();
-  // }
+  /* Recalculate prioirty */
+  if(ticks % 4 == 0) {
+    cal_priority_all();
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

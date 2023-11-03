@@ -480,7 +480,7 @@ void cal_priority_all() {
       e != list_end(&all_list);
       e = list_next(e))
       {
-        struct thread *tmp = list_entry(e, struct thread, elem);
+        struct thread *tmp = list_entry(e, struct thread, allelem);
         cal_priority(tmp);
       }
 }
