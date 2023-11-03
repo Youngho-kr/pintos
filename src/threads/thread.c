@@ -286,8 +286,16 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  /* Change here to priority */
-  list_push_back (&ready_list, &t->elem);
+  // list_push_back (&ready_list, &t->elem);
+  /* Unblocked thread's priroity is higher than RUNNING thread
+     Change RUNNING thread to new unblocked thread*/
+  if(running_thread()->priority < t->priority) {
+    list_insert_ordered(&ready_list, &t->elem, priority_ordered, NULL);
+  }
+  /* Insert Unblocked thread to READY state by sorting for prioirty */
+  else {
+    list_insert_ordered(&ready_list, &t->elem, priority_ordered, NULL);
+  }
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -440,7 +448,8 @@ void thread_sleep(int64_t ticks) {
 
   cur->sleep_time = ticks;
 
-  list_insert_ordered(&sleep_list, &cur->elem, sleep_time_less, NULL);
+  /* Sleep_list insert by sorting priority */
+  list_insert_ordered(&sleep_list, &cur->elem, priority_ordered, NULL);
   // list_push_back(&sleep_list, &cur->elem);
   thread_block();
 
@@ -730,7 +739,7 @@ struct thread *searchChild(tid_t child_tid) {
   return NULL;
 }
 /* Sort sleep list for priority */
-bool sleep_time_less(struct list_elem *elem, struct list_elem *e, void *aux) {
+bool priority_ordered(struct list_elem *elem, struct list_elem *e, void *aux) {
   struct thread *t1 = list_entry(elem, struct thread, elem);
   struct thread *t2 = list_entry(e, struct thread, elem);
   return t1->priority > t2->priority;
