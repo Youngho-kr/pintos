@@ -177,9 +177,10 @@ timer_interrupt (struct intr_frame *args UNUSED)
   /* Wake up threads time to wake up */
   thread_wake (ticks);
 
-  /* Recalculate prioirty */
+  /* Recalculate prioirty
+     For BSD scheduer */
   if(ticks % 4 == 0) {
-    cal_priority_all();
+    // cal_priority_all();
   }
 }
 

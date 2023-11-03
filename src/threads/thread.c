@@ -243,6 +243,18 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  /* New thread's priority is higher
+     Switch thread */
+  if(t->priority > cur->priority)
+    thread_yield();
+  
+  // old_level = intr_disable ();
+  // if (cur != idle_thread) 
+  //   list_push_back (&ready_list, &cur->elem);
+  // cur->status = THREAD_READY;
+  // schedule ();
+  // intr_set_level (old_level);
+
   /* Add child process to currnet process */
   list_push_back(&cur->child_list, &t->child_elem);
 
@@ -289,13 +301,7 @@ thread_unblock (struct thread *t)
   // list_push_back (&ready_list, &t->elem);
   /* Unblocked thread's priroity is higher than RUNNING thread
      Change RUNNING thread to new unblocked thread*/
-  if(running_thread()->priority < t->priority) {
-    list_insert_ordered(&ready_list, &t->elem, priority_ordered, NULL);
-  }
-  /* Insert Unblocked thread to READY state by sorting for prioirty */
-  else {
-    list_insert_ordered(&ready_list, &t->elem, priority_ordered, NULL);
-  }
+  list_insert_ordered(&ready_list, &t->elem, priority_ordered, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -366,7 +372,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered(&ready_list, &cur->elem, priority_ordered, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -393,7 +399,10 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  struct thread *cur = thread_current ();
+  cur->priority = new_priority;
+  // list_remove(&thread_current()->elem);
+  thread_yield();
 }
 
 /* Returns the current thread's priority. */
