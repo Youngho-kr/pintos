@@ -181,5 +181,6 @@ void cal_priority_all();
 void cal_priority();
 void cal_recent_cpu();
 void cal_load_avg();
+bool sleep_time_less(struct list_elem *elem, struct list_elem *e, void *aux);
 
 #endif /* threads/thread.h */

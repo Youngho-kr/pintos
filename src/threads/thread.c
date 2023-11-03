@@ -286,6 +286,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
+  /* Change here to priority */
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -439,7 +440,8 @@ void thread_sleep(int64_t ticks) {
 
   cur->sleep_time = ticks;
 
-  list_push_back(&sleep_list, &cur->elem);
+  list_insert_ordered(&sleep_list, &cur->elem, sleep_time_less, NULL);
+  // list_push_back(&sleep_list, &cur->elem);
   thread_block();
 
   intr_set_level(old_level);
@@ -726,6 +728,12 @@ struct thread *searchChild(tid_t child_tid) {
       }
 
   return NULL;
+}
+/* Sort sleep list for priority */
+bool sleep_time_less(struct list_elem *elem, struct list_elem *e, void *aux) {
+  struct thread *t1 = list_entry(elem, struct thread, elem);
+  struct thread *t2 = list_entry(e, struct thread, elem);
+  return t1->priority > t2->priority;
 }
 
 void thread_aging() {}
