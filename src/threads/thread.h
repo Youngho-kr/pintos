@@ -182,5 +182,6 @@ void cal_priority();
 void cal_recent_cpu();
 void cal_load_avg();
 bool priority_ordered(struct list_elem *elem, struct list_elem *e, void *aux);
+void try_thread_yield();
 
 #endif /* threads/thread.h */

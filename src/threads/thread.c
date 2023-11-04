@@ -158,7 +158,7 @@ thread_tick (void)
 
   /* Project 3 */
   /* RUNNING thread's recent_cpu + 1 */
-  running_thread()->recent_cpu++;  
+  // running_thread()->recent_cpu++;  
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -241,27 +241,16 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
-  /* Add to run queue. */
-  thread_unblock (t);
-
-  /* New thread's priority is higher
-     Switch thread */
-  if(t->priority > cur->priority)
-    thread_yield();
-  
-  // old_level = intr_disable ();
-  // if (cur != idle_thread) 
-  //   list_push_back (&ready_list, &cur->elem);
-  // cur->status = THREAD_READY;
-  // schedule ();
-  // intr_set_level (old_level);
-
   /* Add child process to currnet process */
   list_push_back(&cur->child_list, &t->child_elem);
 
   /* Init file descriptor for stdout, stdin*/
   t->fd[0] = NULL;
   t->fd[1] = NULL;
+
+  /* Add to run queue. */
+  thread_unblock (t);
+  try_thread_yield();
 
   return tid;
 }
@@ -403,7 +392,7 @@ thread_set_priority (int new_priority)
   struct thread *cur = thread_current ();
   cur->priority = new_priority;
   // list_remove(&thread_current()->elem);
-  thread_yield();
+  try_thread_yield();
 }
 
 /* Returns the current thread's priority. */
@@ -754,5 +743,16 @@ bool priority_ordered(struct list_elem *elem, struct list_elem *e, void *aux) {
   struct thread *t2 = list_entry(e, struct thread, elem);
   return t1->priority > t2->priority;
 }
+/* Try to call thread_yield 
+   This function is called READY thread's priority
+   can be higher than RUNNING thread's priority */
+void try_thread_yield() {
+  if(!list_empty(&ready_list)) {
+    if(thread_current()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority)
+      thread_yield();
+  }
+}
 
-void thread_aging() {}
+void thread_aging() {
+
+}
