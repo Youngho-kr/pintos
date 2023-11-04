@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "random": "c",
+        "fixed-point.h": "c"
+    }
+}

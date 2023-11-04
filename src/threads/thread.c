@@ -83,7 +83,9 @@ static tid_t allocate_tid (void);
 struct thread *searchChild(tid_t child_tid);
 
 /* Project 3 */
+#ifndef USERPROG
 void thread_aging();
+#endif
 static struct list sleep_list;
 static int load_avg;
 
@@ -158,7 +160,7 @@ thread_tick (void)
 
   /* Project 3 */
   /* RUNNING thread's recent_cpu + 1 */
-  // running_thread()->recent_cpu++;  
+  running_thread()->recent_cpu++;  
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -474,6 +476,7 @@ void thread_wake(int64_t ticks) {
 }
 /* Calculate priority */
 void cal_priority_all() {
+  cal_load_avg();
   struct list_elem *e;
   for(e = list_begin(&all_list);
       e != list_end(&all_list);
@@ -752,7 +755,16 @@ void try_thread_yield() {
       thread_yield();
   }
 }
-
+#ifndef USERPROG
 void thread_aging() {
-
+  struct list_elem *e;
+  for(e = list_begin(&ready_list);
+      e != list_end(&ready_list);
+      e = list_next(e))
+      {
+        struct thread *t = list_entry(e, struct thread, elem);
+        if(t != idle_thread)
+          t->priority++;
+      }
 }
+#endif
