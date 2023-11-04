@@ -747,7 +747,7 @@ bool priority_ordered(struct list_elem *elem, struct list_elem *e, void *aux) {
    This function is called READY thread's priority
    can be higher than RUNNING thread's priority */
 void try_thread_yield() {
-  if(!list_empty(&ready_list)) {
+  if(running_thread() != idle_thread && !list_empty(&ready_list)) {
     if(thread_current()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority)
       thread_yield();
   }
