@@ -87,7 +87,8 @@ struct thread *searchChild(tid_t child_tid);
 void thread_aging();
 #endif
 static struct list sleep_list;
-static int load_avg;
+// static FIXED load_avg;
+static FIXED load_avg;
 
 
 /* Initializes the threading system by transforming the code
@@ -121,7 +122,10 @@ thread_init (void)
   /* Project 3 */
   /* Init load_avg */
   list_init(&sleep_list);
-  load_avg = 0;
+  load_avg = F_INIT(0);
+  initial_thread->recent_cpu = F_INIT(0);
+  initial_thread->nice = 0;
+  // load_avg = 0;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -155,12 +159,8 @@ thread_tick (void)
   else if (t->pagedir != NULL)
     user_ticks++;
 #endif
-  else
+  else 
     kernel_ticks++;
-
-  /* Project 3 */
-  /* RUNNING thread's recent_cpu + 1 */
-  running_thread()->recent_cpu++;  
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -168,10 +168,18 @@ thread_tick (void)
 
   #ifndef USERPROG
   /* Proejct 3 */
+  running_thread()->recent_cpu = F_ADD(running_thread()->recent_cpu,
+                                       F_INIT(1));  
   // thread_wake_up(); 
 
   if (thread_prior_aging == true)
     thread_aging ();
+
+  if(thread_mlfqs == true) {
+    /* RUNNING thread's recent_cpu + 1 */
+    // running_thread()->recent_cpu = F_ADD(running_thread()->recent_cpu,
+    //                                      F_INIT(1));  
+  }
   #endif
 }
 
@@ -386,14 +394,19 @@ thread_foreach (thread_action_func *func, void *aux)
       func (t, aux);
     }
 }
-
+#ifndef USERPROG
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
+  enum intr_level old_level;
+  old_level = intr_disable();
+
   struct thread *cur = thread_current ();
   cur->priority = new_priority;
-  // list_remove(&thread_current()->elem);
+
+  intr_set_level(old_level);
+
   try_thread_yield();
 }
 
@@ -401,23 +414,43 @@ thread_set_priority (int new_priority)
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  enum intr_level old_level;
+  old_level = intr_disable();
+
+  int tmp = thread_current ()->priority;
+
+  intr_set_level(old_level);
+  return tmp;
 }
 
 /* Sets the current thread's nice value to NICE. 
    Recalculate the thread's priority based on the new nice value */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int new_nice) 
 {
-  thread_current()->nice = nice;
+  enum intr_level old_level;
+  old_level = intr_disable();
+
+  thread_current()->nice = new_nice;
   cal_priority(thread_current());
+
+  intr_set_level(old_level);
+
+  // try_thread_yield();
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  return thread_current()->nice;
+  enum intr_level old_level;
+  old_level = intr_disable();
+
+  int tmp = thread_current()->nice;
+
+  intr_set_level(old_level);
+
+  return tmp;
 }
 
 /* Returns 100 times the system load average. 
@@ -425,8 +458,14 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  enum intr_level old_level;
+  old_level = intr_disable();
+
+  int tmp = F_Rounded_UP(F_MUL(F_INIT(100), load_avg));
+
+  intr_set_level(old_level);
+
+  return tmp;
 }
 
 /* Returns 100 times the current thread's recent_cpu value.
@@ -434,9 +473,16 @@ thread_get_load_avg (void)
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  enum intr_level old_level;
+  old_level = intr_disable();
+
+  int tmp = F_Rounded_UP(F_MUL(F_INIT(100), thread_current()->recent_cpu));
+
+  intr_set_level(old_level);
+
+  return tmp;
 }
+#endif
 
 
 /* Project 3 */
@@ -450,9 +496,12 @@ void thread_sleep(int64_t ticks) {
   cur->sleep_time = ticks;
 
   /* Sleep_list insert by sorting priority */
+  // list_remove(&cur->elem);
   list_insert_ordered(&sleep_list, &cur->elem, priority_ordered, NULL);
   // list_push_back(&sleep_list, &cur->elem);
   thread_block();
+
+  // printf("wake up!! %s\n", thread_current()->name);
 
   intr_set_level(old_level);
 }
@@ -460,45 +509,103 @@ void thread_sleep(int64_t ticks) {
 void thread_wake(int64_t ticks) {
   struct thread *cur = thread_current();
   struct list_elem *e;
+
+  bool flag = false;
+
   for(e = list_begin(&sleep_list);
       e != list_end(&sleep_list);
       ) {
-        struct thread *tmp = list_entry(e, struct thread, elem);
+        struct thread *t = list_entry(e, struct thread, elem);
         /* Check time to wake up */
-        if(tmp->sleep_time <= ticks) {
-          e = list_remove(&tmp->elem);
-          thread_unblock(tmp);
+        if(t->sleep_time <= ticks) {
+          e = list_remove(&t->elem);
+          // printf("%s: wake up\n", t->name);
+          flag = true;
+          thread_unblock(t);
         }
         else {
           e = list_next(e);
         }
       }
+  // if(flag)
+    // try_thread_yield();
 }
+#ifndef USERPROG
 /* Calculate priority */
 void cal_priority_all() {
-  cal_load_avg();
+  enum intr_level old_level;
+  old_level = intr_disable();
+
   struct list_elem *e;
   for(e = list_begin(&all_list);
       e != list_end(&all_list);
       e = list_next(e))
       {
-        struct thread *tmp = list_entry(e, struct thread, allelem);
-        cal_priority(tmp);
+        struct thread *t = list_entry(e, struct thread, allelem);
+        cal_priority(t);
       }
+  list_sort(&ready_list, priority_ordered, NULL);
+  list_sort(&sleep_list, priority_ordered, NULL);
+
+  intr_set_level(old_level);
+
+  // try_thread_yield();
 }
 void cal_priority(struct thread * t) {
-  t->priority = PRI_MAX + (t->recent_cpu / 4) - (t->nice * 2);
+  // t->priority = PRI_MAX + (t->recent_cpu / 4) - (t->nice * 2);
+  t->priority = F_Rounded_UP(F_SUB(F_SUB(F_INIT(PRI_MAX),
+                                         F_DIV(t->recent_cpu, F_INIT(4))),
+                                   F_MUL(F_INIT(t->nice), F_INIT(2))));
+  if(t->priority > PRI_MAX)
+    t->priority = PRI_MAX;
+  else if(t->priority < PRI_MIN)
+    t->priority = PRI_MIN;
 }
 /* Calculate recent_cpu */
-void cal_recent_cpu() {
-  struct thread *cur;
-  cur->recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * cur->recent_cpu + cur->nice;
+void cal_recent_cpu_all() {
+  enum intr_level old_level;
+  old_level = intr_disable();
+
+  struct list_elem *e;
+  for(e = list_begin(&all_list);
+      e != list_end(&all_list);
+      e = list_next(e))
+      {
+        struct thread *t = list_entry(e, struct thread, allelem);
+        cal_recent_cpu(t);
+      }
+    
+  intr_set_level(old_level);
+}
+void cal_recent_cpu(struct thread *t) {
+  // cur->recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * cur->recent_cpu + cur->nice;
+  t->recent_cpu = F_ADD(F_MUL(F_DIV(F_MUL(F_INIT(2), load_avg),
+                                    F_ADD(F_MUL(F_INIT(2), load_avg),
+                                          F_INIT(1))),
+                              t->recent_cpu),
+                        F_INIT(t->nice));
 }
 /* Calculate load_avg */
 void cal_load_avg() {
-  load_avg = (59 / 60) * load_avg + (1 / 60) * list_size(&ready_list);
-}
+  enum intr_level old_level;
+  old_level = intr_disable();
 
+  int ready_thread;
+  if(thread_current() == idle_thread)
+    ready_thread = list_size(&ready_list);
+  else
+    ready_thread = list_size(&ready_list) + 1;
+  // load_avg = (59 / 60) * load_avg + (1 / 60) * list_size(&ready_list);
+  load_avg = F_ADD(F_MUL(F_DIV(F_INIT(59),
+                               F_INIT(60)), 
+                         load_avg),
+                   F_MUL(F_DIV(F_INIT(1), 
+                               F_INIT(60)),
+                         F_INIT(ready_thread)));
+
+  intr_set_level(old_level);
+}
+#endif
 /* Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread is initially put on the ready list by
@@ -764,7 +871,8 @@ void thread_aging() {
       {
         struct thread *t = list_entry(e, struct thread, elem);
         if(t != idle_thread)
-          t->priority++;
+          if(t->priority < PRI_MAX)
+            t->priority++;
       }
 }
 #endif

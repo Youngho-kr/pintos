@@ -7,6 +7,7 @@
 
 /* Project 3 */
 #include "threads/synch.h"
+#include "threads/fixed-point.h"
 
 // #include "synch.h"
 
@@ -129,7 +130,7 @@ struct thread
     /* Proj 3 */
     int sleep_time;                     /* Tick arrives sleep_time, wake up */
     int nice;                           /* Calculate priority */
-    int recent_cpu;                     /* Calculate priority */
+    FIXED recent_cpu;                     /* Calculate priority */
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -179,6 +180,7 @@ void thread_sleep(int64_t ticks);
 void thread_wake(int64_t ticks);
 void cal_priority_all();
 void cal_priority();
+void cal_recent_cpu_all();
 void cal_recent_cpu();
 void cal_load_avg();
 bool priority_ordered(struct list_elem *elem, struct list_elem *e, void *aux);

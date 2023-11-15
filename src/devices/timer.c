@@ -173,15 +173,24 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
+  /* RUNNING thread's recent_cpu increase here */
   thread_tick ();
   /* Wake up threads time to wake up */
   thread_wake (ticks);
 
+  #ifndef USERPROG
   /* Recalculate prioirty
      For BSD scheduer */
-  if(ticks % 4 == 0) {
-    // cal_priority_all();
+  if(thread_mlfqs == true) {
+    if(ticks % TIMER_FREQ == 0) {
+      cal_load_avg();
+      cal_recent_cpu_all();
+    }
+    if(ticks % 4 == 0) {
+      cal_priority_all();
+    }
   }
+  #endif
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
