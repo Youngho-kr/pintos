@@ -495,13 +495,9 @@ void thread_sleep(int64_t ticks) {
 
   cur->sleep_time = ticks;
 
-  /* Sleep_list insert by sorting priority */
-  // list_remove(&cur->elem);
+  /* Insert sleep_list by priority */
   list_insert_ordered(&sleep_list, &cur->elem, priority_ordered, NULL);
-  // list_push_back(&sleep_list, &cur->elem);
   thread_block();
-
-  // printf("wake up!! %s\n", thread_current()->name);
 
   intr_set_level(old_level);
 }
