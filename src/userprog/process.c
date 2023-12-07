@@ -38,13 +38,7 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  // fn_copy2 = palloc_get_page(0);
-  // if (fn_copy2 == NULL)
-  //   return TID_ERROR;
-  // strlcpy(fn_copy2, file_name, PGSIZE);
-
-  /* Another copy of FILE_NAME */
-  // fn_copy2 =(char *)malloc(sizeof(char) * (strlen(file_name) + 1));
+  // char fn_copy2[strlen(file_name) + 1];
   // strlcpy(fn_copy2, file_name, strlen(file_name) + 1);
   // int i;
   // for(i = 0; fn_copy2 != '\0'; i++) {
@@ -52,20 +46,19 @@ process_execute (const char *file_name)
   //     break;
   // }
   // fn_copy2[i] = '\0';
-  char fn_copy2[strlen(file_name) + 1];
-  strlcpy(fn_copy2, file_name, strlen(file_name) + 1);
-  int i;
-  for(i = 0; fn_copy2 != '\0'; i++) {
-    if(fn_copy2[i] == ' ')
-      break;
+  char fn_copy2[128];
+  int i = 0;
+  while(fn_copy[i] != ' ' && fn_copy[i] != '\0') {
+    fn_copy2[i] = fn_copy[i];
+    i++;
   }
   fn_copy2[i] = '\0';
+
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (fn_copy2, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR) {
     palloc_free_page (fn_copy); 
-    // palloc_free_page (fn_copy2);
   }
 
   struct thread *cur = thread_current();
@@ -81,6 +74,8 @@ process_execute (const char *file_name)
 
   if(child->exit_status == -1)                /* File load fail */
     return -1;
+
+  // printf("Execute -> child: %s\n", child->name);
 
   return tid;
 }
@@ -135,6 +130,8 @@ process_wait (tid_t child_tid UNUSED)
 
   if(child == NULL)
     return -1;
+
+  // printf("child: %s\n", child->name);
 
   /* list_remove() call before process exit */
   sema_down(&child->sema_wait);
@@ -468,20 +465,17 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* File load fail */
   if(!success) {
     t->exit_status = -1;
-    // palloc_free_page(fn_copy);
   }
-
-  // palloc_free_page(fn_copy);
 
   // if(file != NULL)
   //   file_deny_write(file);
 
   /* Sync for caller */
+  // printf("semaup %s\n", t->parent->name);
   sema_up(&t->parent->sema_exec);
-
-  // free(fn_copy);
-
+  
   file_close (file);
+  
   return success;
 }
 
@@ -647,8 +641,10 @@ setup_stack (void **esp)
   vme->read_bytes = 0;
   vme->zero_bytes = 0;
 
-  if(!insert_vme(&thread_current()->vm, vme))
+  if(!insert_vme(&thread_current()->vm, vme)) {
+    free(vme);
     return false;
+  }
 
   return success;
 }
@@ -682,28 +678,16 @@ bool handle_mm_fault(struct vm_entry *vme) {
 
   switch (vme->type) {
     case VM_BIN:
-      if (!load_file(kpage, vme))
+      if (!load_file(kpage, vme)) {
+        palloc_free_page (kpage);
         return false;
-      if (!install_page(vme->vaddr, kpage, vme->writeable))
+      }
+      if (!install_page(vme->vaddr, kpage, vme->writeable)) {
+        palloc_free_page (kpage);
         return false;
+      }
       vme->is_loaded = true;
   }
 
   return true;
-
-
-        // /* Load this page. */
-      // if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-      //   {
-      //     palloc_free_page (kpage);
-      //     return false; 
-      //   }
-      // memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-      // /* Add the page to the process's address space. */
-      // if (!install_page (upage, kpage, writable)) 
-      //   {
-      //     palloc_free_page (kpage);
-      //     return false; 
-      //   }
 }

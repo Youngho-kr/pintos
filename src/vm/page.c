@@ -33,8 +33,10 @@ bool insert_vme (struct hash *vm, struct vm_entry *vme) {
     return false;
 }
 bool delete_vme (struct hash *vm, struct vm_entry *vme) {
-    if(hash_delete(vm, &vme->elem) != NULL)
+    if(hash_delete(vm, &vme->elem) != NULL) {
+        vm_destroy(vm);
         return true;
+    }
     return false;
 }
 

@@ -106,6 +106,7 @@ void sys_exit(int status) {
    return child process id
 */
 tid_t sys_exec(const char *cmd_line) {
+  // printf("SYS_EXEC: %s\n", cmd_line);
   return process_execute(cmd_line);
 }
 /* Wait exec file 
@@ -154,8 +155,8 @@ int sys_open(const char *file) {
   }
   
   /* Deny write for executing file */
-  // if(strcmp(cur->name, file) == 0)
-  //   file_deny_write(cur->fd[idx]);
+  if(strcmp(cur->name, file) == 0)
+    file_deny_write(cur->fd[idx]);
 
   lock_release(&syscall_lock);
 
