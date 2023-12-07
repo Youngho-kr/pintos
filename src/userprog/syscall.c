@@ -46,16 +46,45 @@ syscall_init (void)
 }
 
 /* Check ptr is valid address */
-void checkPtr(void *ptr) {
-  checkAddress(ptr);
-  checkAddress(ptr + 3);
+// void checkPtr(void *ptr) {
+//   // checkAddress(ptr);
+//   // checkAddress(ptr + 3);
+// }
+// void checkAddress(void *ptr) {
+//   if(ptr == NULL)
+//     sys_exit(-1);
+//   if(is_kernel_vaddr(ptr))
+//     sys_exit(-1);
+//   if(pagedir_get_page(thread_current()->pagedir, ptr) == NULL)
+//     sys_exit(-1);
+// }
+
+struct vm_entry *check_address (void *addr) {
+  // printf("check address %p\n", addr);
+  if (addr == NULL)
+    sys_exit(-1);
+  if (addr < (void *)0x08048000 || addr >= (void *)PHYS_BASE)
+    sys_exit(-1);
+  return find_vme(addr);
 }
-void checkAddress(void *ptr) {
-  if(ptr == NULL)
-    sys_exit(-1);
-  if(is_kernel_vaddr(ptr))
-    sys_exit(-1);
-  if(pagedir_get_page(thread_current()->pagedir, ptr) == NULL)
+/* Function for Read system call */
+void check_valid_buffer (void *buffer,  unsigned size, bool to_write) {
+  // printf("buffer\n");
+  for (unsigned i = 0; i < size; i++) {
+    struct vm_entry *vme = check_address(buffer + i);
+    if(vme == NULL)
+      sys_exit(-1);
+    // if(to_write)
+    //   sys_exit(-1);
+    if(!vme->writeable)  
+      sys_exit(-1);
+  }
+  // printf("==buffer\n");
+}
+/* Function for Write system call */
+void check_valid_string (const void *str) {
+  struct vm_entry *vme = check_address(str);
+  if(vme == NULL)
     sys_exit(-1);
 }
 
@@ -77,8 +106,6 @@ void sys_exit(int status) {
    return child process id
 */
 tid_t sys_exec(const char *cmd_line) {
-  checkPtr(cmd_line);
-
   return process_execute(cmd_line);
 }
 /* Wait exec file 
@@ -91,21 +118,21 @@ int sys_wait(tid_t pid) {
    return true if success, otherwise false
 */
 bool sys_create(const char *file, unsigned initial_size) {
-  checkPtr(file);
+  // checkPtr(file);
   return filesys_create(file, initial_size);
 }
 /* Remove file with file name 
    return true if success, otherwise false
 */
 bool sys_remove(const char *file) {
-  checkPtr(file);
+  // checkPtr(file);
   return filesys_remove(file);
 }
 /* Open file with file name
    return true if success, otherwise false
 */
 int sys_open(const char *file) {
-  checkPtr(file);
+  // checkPtr(file);
   
   struct thread *cur = thread_current();
 
@@ -127,8 +154,8 @@ int sys_open(const char *file) {
   }
   
   /* Deny write for executing file */
-  if(strcmp(cur->name, file) == 0)
-    file_deny_write(cur->fd[idx]);
+  // if(strcmp(cur->name, file) == 0)
+  //   file_deny_write(cur->fd[idx]);
 
   lock_release(&syscall_lock);
 
@@ -147,7 +174,7 @@ int sys_filesize(int fd) {
    return actually read bytes
 */
 int sys_read(int fd, void *buffer, unsigned size) {
-  checkPtr(buffer);
+  // checkPtr(buffer);
   if(fd == 0) {
     int count = 0;
     for(int i = 0; i < size; i++) {
@@ -179,7 +206,7 @@ int sys_read(int fd, void *buffer, unsigned size) {
    return actually write bytes
 */
 int sys_write(int fd, const void *buffer, unsigned size) {
-  checkPtr(buffer);
+  // checkPtr(buffer);
   if(fd == 1) {
     int count = 0;
     for(int i = 0; i < size; i++) {
@@ -237,7 +264,9 @@ void sys_close(int fd) {
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-  checkPtr(f->esp);
+  check_address(f->esp);
+
+  // printf("syscall_handler\n");
 
   // hex_dump(f->esp, f->esp, 100, 1);
 
@@ -247,58 +276,83 @@ syscall_handler (struct intr_frame *f UNUSED)
       sys_halt();
       break;
     case SYS_EXIT:                   /* Terminate this process. */
-      checkPtr((int *)(f->esp + 4));
+      // checkPtr((int *)(f->esp + 4));
+      check_address((void *)(f->esp + 4));
       sys_exit(*(int *)(f->esp + 4));
       break;
     case SYS_EXEC:                   /* Start another process. */
-      checkPtr((int *)(f->esp + 4));
+      // checkPtr((int *)(f->esp + 4));
+      check_address((void *)(f->esp + 4));
+      check_valid_string(*(void **)(f->esp + 4));
       f->eax = sys_exec(*(char **)(f->esp + 4));
       break;
     case SYS_WAIT:                   /* Wait for a child process to die. */
-      checkPtr((int *)(f->esp + 4));
+      // checkPtr((int *)(f->esp + 4));
+      check_address((void *)(f->esp + 4));
       f->eax = sys_wait(*(tid_t *)(f->esp + 4));
       break;
     /* Project 2 */
     case SYS_CREATE:                 /* Create a file. */
-      checkPtr((int *)(f->esp + 4));
-      checkPtr((int *)(f->esp + 8));
+      // checkPtr((void *)(f->esp + 4));
+      // checkPtr((void *)(f->esp + 8));
+      check_address((void *)(f->esp + 4));
+      check_address((void *)(f->esp + 8));
+      check_valid_string(*(char **)(f->esp + 4));
       f->eax = sys_create(*(char **)(f->esp + 4), *(unsigned *)(f->esp + 8));
       break;
     case SYS_REMOVE:                 /* Delete a file. */
-      checkPtr((int *)(f->esp + 4));
+      // checkPtr((int *)(f->esp + 4));
+      check_valid_string((void *)(f->esp + 4));
       f->eax = sys_remove(*(char **)(f->esp + 4));
       break;
     case SYS_OPEN:                   /* Open a file. */
-      checkPtr((int *)(f->esp + 4));
+      // checkPtr((int *)(f->esp + 4));
+      check_address((void *)(f->esp + 4));
+      check_address((void *)(f->esp + 8));
+      check_valid_string(*(char **)(f->esp + 4));
       f->eax = sys_open(*(char **)(f->esp + 4));
       break;
     case SYS_FILESIZE:               /* Obtain a file's size. */
-      checkPtr((int *)(f->esp + 4));
+      // checkPtr((int *)(f->esp + 4));
+      check_address((void *)(f->esp + 4));
       f->eax = sys_filesize(*(int *)(f->esp + 4));
       break;
     case SYS_READ:                   /* Read from a file. */
-      checkPtr((int *)(f->esp + 4));
-      checkPtr((int *)(f->esp + 8));
-      checkPtr((int *)(f->esp + 12));
-      f->eax = sys_read(*(int *)(f->esp + 4), *(char **)(f->esp + 8), *(unsigned *)(f->esp + 12));
+      // checkPtr((int *)(f->esp + 4));
+      // checkPtr((int *)(f->esp + 8));
+      // checkPtr((int *)(f->esp + 12));
+      check_address((void *)(f->esp + 4));
+      check_address((void *)(f->esp + 8));
+      check_address((void *)(f->esp + 12));
+      check_valid_buffer(*(char **)(f->esp + 8), *(unsigned *)(f->esp + 12), false);
+      int result = sys_read(*(int *)(f->esp + 4), *(void **)(f->esp + 8), *(unsigned *)(f->esp + 12));
+      f->eax = result;
       break;
     case SYS_WRITE:                  /* Write to a file. */
-      checkPtr((int *)(f->esp + 4));
-      checkPtr((int *)(f->esp + 8));
-      checkPtr((int *)(f->esp + 12));
-      f->eax = sys_write(*(int *)(f->esp + 4), *(char **)(f->esp + 8), *(unsigned *)(f->esp + 12));
+      // checkPtr((int *)(f->esp + 4));
+      // checkPtr((int *)(f->esp + 8));
+      // checkPtr((int *)(f->esp + 12));
+      check_address((void *)(f->esp + 4));
+      check_address((void *)(f->esp + 8));
+      check_address((void *)(f->esp + 12));
+      check_valid_string(*(char **)(f->esp + 8));
+      f->eax = sys_write(*(int *)(f->esp + 4), *(void **)(f->esp + 8), *(unsigned *)(f->esp + 12));
       break;
     case SYS_SEEK:                   /* Change position in a file. */
-      checkPtr((int *)(f->esp + 4));
-      checkPtr((int *)(f->esp + 8));
-      sys_seek(*(int *)(f->esp + 4), *(int *)(f->esp + 8));
+      // checkPtr((int *)(f->esp + 4));
+      // checkPtr((int *)(f->esp + 8));
+      check_address((void *)(f->esp + 4));
+      check_address((void *)(f->esp + 8));
+      sys_seek(*(int *)(f->esp + 4), *(unsigned int *)(f->esp + 8));
       break;
     case SYS_TELL:                   /* Report current position in a file. */
-      checkPtr((int *)(f->esp + 4));
-      f->eax = sys_tell(*(int *)(f->esp + 4));
+      // checkPtr((int *)(f->esp + 4));
+      check_address((void *)(f->esp + 4));
+      f->eax = sys_tell(*(unsigned int *)(f->esp + 4));
       break;
     case SYS_CLOSE:                  /* Close a file. */
-      checkPtr((int *)(f->esp + 4));
+      // checkPtr((int *)(f->esp + 4));
+      check_address((void *)(f->esp + 4));
       sys_close(*(int *)(f->esp + 4));
       break;
 

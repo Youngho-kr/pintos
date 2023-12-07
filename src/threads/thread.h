@@ -9,6 +9,9 @@
 #include "threads/synch.h"
 #include "threads/fixed-point.h"
 
+/* Project 4 */
+#include "vm/page.h"
+
 // #include "synch.h"
 
 #ifndef USERPROG
@@ -131,6 +134,9 @@ struct thread
     int sleep_time;                     /* Tick arrives sleep_time, wake up */
     int nice;                           /* Calculate priority */
     FIXED recent_cpu;                     /* Calculate priority */
+
+    /* Proj 4 */
+    struct hash vm;                     /* Hash table */
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

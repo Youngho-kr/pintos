@@ -28,7 +28,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy, *fn_copy2;
+  char *fn_copy;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -42,8 +42,17 @@ process_execute (const char *file_name)
   // if (fn_copy2 == NULL)
   //   return TID_ERROR;
   // strlcpy(fn_copy2, file_name, PGSIZE);
+
   /* Another copy of FILE_NAME */
-  fn_copy2 =(char *)malloc(sizeof(char) * (strlen(file_name) + 1));
+  // fn_copy2 =(char *)malloc(sizeof(char) * (strlen(file_name) + 1));
+  // strlcpy(fn_copy2, file_name, strlen(file_name) + 1);
+  // int i;
+  // for(i = 0; fn_copy2 != '\0'; i++) {
+  //   if(fn_copy2[i] == ' ')
+  //     break;
+  // }
+  // fn_copy2[i] = '\0';
+  char fn_copy2[strlen(file_name) + 1];
   strlcpy(fn_copy2, file_name, strlen(file_name) + 1);
   int i;
   for(i = 0; fn_copy2 != '\0'; i++) {
@@ -84,6 +93,9 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
+
+  /* Proj 4 */
+  vm_init(&thread_current()->vm);
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -142,6 +154,19 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  sema_up(&cur->sema_wait);
+  sema_down(&cur->sema_exit);
+
+  /* Close file descriptor for exiting process */
+  for(int i = 2; i < MAX_FD; i++) {
+    if(cur->fd[i] != NULL) {
+      sys_close(i);
+      cur->fd[i] = NULL;
+    }
+  }
+
+  vm_destroy(&cur->vm);
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -159,23 +184,27 @@ process_exit (void)
       pagedir_destroy (pd);
     }
 
-    /* Close file descriptor for exiting process */
-    for(int i = 2; i < MAX_FD; i++) {
-      if(cur->fd[i] != NULL) {
-        sys_close(i);
-        cur->fd[i] = NULL;
-      }
-    }
+    // /* Close file descriptor for exiting process */
+    // for(int i = 2; i < MAX_FD; i++) {
+    //   if(cur->fd[i] != NULL) {
+    //     sys_close(i);
+    //     cur->fd[i] = NULL;
+    //   }
+    // }
 
+    /* ?? */
     /* After executing file is end, writing to file is allow */
-    struct File * f = filesys_open(cur->name);
-    if(f != NULL) {
-      file_allow_write(f);
-      file_close(f);
-    }
+    // struct File * f = filesys_open(cur->name);
+    // if(f != NULL) {
+    //   file_allow_write(f);
+    //   file_close(f);
+    // }
 
-    sema_up(&cur->sema_wait);
-    sema_down(&cur->sema_exit);
+    // printf("process exit1\n");
+    // sema_up(&cur->sema_wait);
+    // printf("process exit2\n");
+    // sema_down(&cur->sema_exit);
+    // printf("process exit3\n");
 }
 
 /* Sets up the CPU for running user code in the current
@@ -284,10 +313,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Parse file name */
-  char *fn_copy = palloc_get_page(0);
+  // char *fn_copy = palloc_get_page(0);
+  // strlcpy(fn_copy, file_name, PGSIZE);
+  char fn_copy[256];
   strlcpy(fn_copy, file_name, PGSIZE);
-  // char *fn_copy = (char *)malloc(sizeof(char) * (strlen(file_name) + 1));
-  // strlcpy(fn_copy, file_name, strlen(file_name) + 1);
 
   char *argv[32];
   int argc = 0;
@@ -442,7 +471,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     // palloc_free_page(fn_copy);
   }
 
-  palloc_free_page(fn_copy);
+  // palloc_free_page(fn_copy);
 
   // if(file != NULL)
   //   file_deny_write(file);
@@ -536,29 +565,48 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-      /* Get a page of memory. */
-      uint8_t *kpage = palloc_get_page (PAL_USER);
-      if (kpage == NULL)
+      // /* Get a page of memory. */
+      // uint8_t *kpage = palloc_get_page (PAL_USER);
+      // if (kpage == NULL)
+      //   return false;
+
+      // /* Load this page. */
+      // if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+      //   {
+      //     palloc_free_page (kpage);
+      //     return false; 
+      //   }
+      // memset (kpage + page_read_bytes, 0, page_zero_bytes);
+
+      // /* Add the page to the process's address space. */
+      // if (!install_page (upage, kpage, writable)) 
+      //   {
+      //     palloc_free_page (kpage);
+      //     return false; 
+      //   }
+
+      struct vm_entry *vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
+      if(vme == NULL)
         return false;
 
-      /* Load this page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-        {
-          palloc_free_page (kpage);
-          return false; 
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+      memset(vme, 0, sizeof(struct vm_entry));
 
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable)) 
-        {
-          palloc_free_page (kpage);
-          return false; 
-        }
+      vme->type = VM_BIN;
+      vme->vaddr = upage;
+      vme->writeable = writable;
+      vme->is_loaded = false;
+      vme->vm_file = file_reopen(file);
+      vme->offset = ofs;
+      vme->read_bytes = page_read_bytes;
+      vme->zero_bytes = page_zero_bytes;
+
+      if(!insert_vme(&thread_current()->vm, vme))
+        return false;
 
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
+      ofs += page_read_bytes;
       upage += PGSIZE;
     }
   return true;
@@ -581,6 +629,27 @@ setup_stack (void **esp)
       else
         palloc_free_page (kpage);
     }
+
+  struct vm_entry *vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
+  if (vme == NULL)
+    return false;
+    
+  memset(vme, 0, sizeof(struct vm_entry));
+
+  // vme->type = VM_ANON;
+  /* ?? */
+  vme->type = VM_BIN;
+  vme->vaddr = ((uint8_t *) PHYS_BASE) - PGSIZE;
+  vme->writeable = success;
+  vme->is_loaded = success;
+  vme->vm_file = NULL;
+  vme->offset = 0;
+  vme->read_bytes = 0;
+  vme->zero_bytes = 0;
+
+  if(!insert_vme(&thread_current()->vm, vme))
+    return false;
+
   return success;
 }
 
@@ -602,4 +671,39 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+bool handle_mm_fault(struct vm_entry *vme) {
+  // printf("handle_mm_fault\n");
+  uint8_t *kpage = palloc_get_page (PAL_USER);
+
+  if (kpage == NULL)
+    return false;
+
+  switch (vme->type) {
+    case VM_BIN:
+      if (!load_file(kpage, vme))
+        return false;
+      if (!install_page(vme->vaddr, kpage, vme->writeable))
+        return false;
+      vme->is_loaded = true;
+  }
+
+  return true;
+
+
+        // /* Load this page. */
+      // if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+      //   {
+      //     palloc_free_page (kpage);
+      //     return false; 
+      //   }
+      // memset (kpage + page_read_bytes, 0, page_zero_bytes);
+
+      // /* Add the page to the process's address space. */
+      // if (!install_page (upage, kpage, writable)) 
+      //   {
+      //     palloc_free_page (kpage);
+      //     return false; 
+      //   }
 }

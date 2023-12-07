@@ -150,21 +150,35 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  /* Page fault caused by user not leads to kernel panic
-     user program exit with exit code -1
-  */
-  if(user || is_kernel_vaddr(fault_addr)) {
+  /* If valid address -> follow below flow
+     Unvalid -> kill (f) or sys_exit(-1) */
+  if(!not_present)
    sys_exit(-1);
-  }
 
-  /* To implement virtual memory, delete the rest of the function
-     body, and replace it with code that brings in the page to
-     which fault_addr refers. */
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
-          fault_addr,
-          not_present ? "not present" : "rights violation",
-          write ? "writing" : "reading",
-          user ? "user" : "kernel");
-  kill (f);
+  struct vm_entry *vme = find_vme(fault_addr);
+  if (vme == NULL)
+   sys_exit(-1);
+
+  if(!handle_mm_fault(vme))
+   sys_exit(-1);
+
+  return;
+
+//   /* Page fault caused by user not leads to kernel panic
+//      user program exit with exit code -1
+//   */
+//   if(user || is_kernel_vaddr(fault_addr)) {
+//    sys_exit(-1);
+//   }
+
+//   /* To implement virtual memory, delete the rest of the function
+//      body, and replace it with code that brings in the page to
+//      which fault_addr refers. */
+//   printf ("Page fault at %p: %s error %s page in %s context.\n",
+//           fault_addr,
+//           not_present ? "not present" : "rights violation",
+//           write ? "writing" : "reading",
+//           user ? "user" : "kernel");
+//   kill (f);
 }
 
