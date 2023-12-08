@@ -8,6 +8,7 @@
 #include "userprog/pagedir.h"
 
 #include "filesys/file.h"
+#include <inttypes.h>
 
 static void syscall_handler (struct intr_frame *);
 void sys_halt (void) NO_RETURN;
@@ -23,6 +24,8 @@ int sys_write (int fd, const void *buffer, unsigned length);
 void sys_seek (int fd, unsigned position);
 unsigned sys_tell (int fd);
 void sys_close (int fd);
+int sys_mmap (int fd, void *addr);
+void sys_munmap (struct vm_entry *vme);
 
 /*
    All file system call have check file descriptor is valid
@@ -95,6 +98,10 @@ void sys_halt() {
 }
 /* Exit with exit code */
 void sys_exit(int status) {
+  /* Release all lock */
+  if(syscall_lock.holder == thread_current())
+    lock_release(&syscall_lock);
+
   struct thread *cur = thread_current();
   cur->exit_status = status;
 
@@ -107,7 +114,11 @@ void sys_exit(int status) {
 */
 tid_t sys_exec(const char *cmd_line) {
   // printf("SYS_EXEC: %s\n", cmd_line);
-  return process_execute(cmd_line);
+  tid_t result;
+  lock_acquire(&syscall_lock);
+  result = process_execute(cmd_line);
+  lock_release(&syscall_lock);
+  return result;
 }
 /* Wait exec file 
    return exit code 
@@ -120,20 +131,31 @@ int sys_wait(tid_t pid) {
 */
 bool sys_create(const char *file, unsigned initial_size) {
   // checkPtr(file);
-  return filesys_create(file, initial_size);
+  bool result;
+  lock_acquire(&syscall_lock);
+  result = filesys_create(file, initial_size);
+  lock_release(&syscall_lock);
+  return result;
 }
 /* Remove file with file name 
    return true if success, otherwise false
 */
 bool sys_remove(const char *file) {
   // checkPtr(file);
-  return filesys_remove(file);
+  bool result;
+  lock_acquire(&syscall_lock);
+  result = filesys_remove(file);
+  lock_release(&syscall_lock);
+  return result;
 }
 /* Open file with file name
    return true if success, otherwise false
 */
 int sys_open(const char *file) {
   // checkPtr(file);
+
+  // printf("%s\n", file);
+  lock_acquire(&syscall_lock);
   
   struct thread *cur = thread_current();
 
@@ -142,21 +164,19 @@ int sys_open(const char *file) {
     if(cur->fd[idx] == NULL)
       break;
   }
-  if(idx == MAX_FD)
+  if(idx == MAX_FD) {
+    lock_release(&syscall_lock);
     return -1;
-
-  lock_acquire(&syscall_lock);
+  }
 
   cur->fd[idx] = filesys_open(file);
+
+  // printf("%p\n", cur->fd[idx]);
 
   if(cur->fd[idx] == NULL) {
     lock_release(&syscall_lock);
     return -1;
   }
-  
-  /* Deny write for executing file */
-  if(strcmp(cur->name, file) == 0)
-    file_deny_write(cur->fd[idx]);
 
   lock_release(&syscall_lock);
 
@@ -188,9 +208,9 @@ int sys_read(int fd, void *buffer, unsigned size) {
     return -1;
   }
   else {
-    struct thread *cur = thread_current();
-
     lock_acquire(&syscall_lock);
+
+    struct thread *cur = thread_current();
 
     if(cur->fd[fd] == NULL) {
       lock_release(&syscall_lock);
@@ -220,9 +240,9 @@ int sys_write(int fd, const void *buffer, unsigned size) {
     return -1;
   }
   else {
-    struct thread *cur = thread_current();
-
     lock_acquire(&syscall_lock);
+
+    struct thread *cur = thread_current();
 
     if(cur->fd[fd] == NULL) {
       lock_release(&syscall_lock);
@@ -260,6 +280,23 @@ void sys_close(int fd) {
     sys_exit(-1);
   file_close(cur->fd[fd]);
   cur->fd[fd] = NULL;
+}
+/* Mapping file to virtual memory */
+int sys_mmap (int fd, void *addr) {
+  if (fd < 2 || fd >= MAX_FD)
+    sys_exit(-1);
+
+  struct thread *t = thread_current();
+  if (t->fd[fd] == NULL)
+    sys_exit(-1);
+
+  struct mmap_file *map_file;
+  struct file *file = file_reopen(file);
+
+  
+}
+void sys_munmap (struct vm_entry *vme) {
+
 }
 
 static void
@@ -309,7 +346,6 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_OPEN:                   /* Open a file. */
       // checkPtr((int *)(f->esp + 4));
       check_address((void *)(f->esp + 4));
-      check_address((void *)(f->esp + 8));
       check_valid_string(*(char **)(f->esp + 4));
       f->eax = sys_open(*(char **)(f->esp + 4));
       break;
@@ -359,8 +395,13 @@ syscall_handler (struct intr_frame *f UNUSED)
 
     /* Project 3 and optionally project 4. */
     case SYS_MMAP:                   /* Map a file into memory. */
+      check_address((void *)(f->esp + 4));
+      check_address((void *)(f->esp + 8));
+      check_address(*(void **)(f->esp + 8));
+      f->eax = sys_mmap(*(int *)(f->esp + 4), *(void **)(f->esp));
     case SYS_MUNMAP:                 /* Remove a memory mapping. */
-
+      check_address((void *)(f->esp + 4));
+      sys_munmap(*(void **)(f->esp + 4));
     /* Project 4 only. */
     case SYS_CHDIR:                  /* Change the current directory. */
     case SYS_MKDIR:                  /* Create a directory. */

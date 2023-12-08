@@ -151,16 +151,19 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
-  sema_up(&cur->sema_wait);
-  sema_down(&cur->sema_exit);
+  if(cur->loaded_file != NULL)
+    file_close(cur->loaded_file);
 
   /* Close file descriptor for exiting process */
   for(int i = 2; i < MAX_FD; i++) {
     if(cur->fd[i] != NULL) {
-      sys_close(i);
-      cur->fd[i] = NULL;
+      file_close(cur->fd[i]);
     }
-  }
+  }  
+
+  sema_up(&cur->sema_wait);
+  sema_down(&cur->sema_exit);
+  // printf("process exit3\n");
 
   vm_destroy(&cur->vm);
 
@@ -180,6 +183,8 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
+  
 
     // /* Close file descriptor for exiting process */
     // for(int i = 2; i < MAX_FD; i++) {
@@ -327,6 +332,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   }
 
   /* Open executable file. */
+  // printf("filesysopen %s\n", argv[0]);
   file = filesys_open (argv[0]);
   if (file == NULL) 
     {
@@ -467,14 +473,16 @@ load (const char *file_name, void (**eip) (void), void **esp)
     t->exit_status = -1;
   }
 
-  // if(file != NULL)
-  //   file_deny_write(file);
+  if(file != NULL)
+    file_deny_write(file);
+
+  t->loaded_file = file;
 
   /* Sync for caller */
   // printf("semaup %s\n", t->parent->name);
   sema_up(&t->parent->sema_exec);
   
-  file_close (file);
+  // file_close (file);
   
   return success;
 }
@@ -589,7 +597,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       vme->vaddr = upage;
       vme->writeable = writable;
       vme->is_loaded = false;
-      vme->vm_file = file_reopen(file);
+      vme->vm_file = file;
       vme->offset = ofs;
       vme->read_bytes = page_read_bytes;
       vme->zero_bytes = page_zero_bytes;

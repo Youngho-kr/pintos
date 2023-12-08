@@ -1,6 +1,10 @@
 {
     "files.associations": {
         "random": "c",
-        "fixed-point.h": "c"
+        "fixed-point.h": "c",
+        "file.h": "c",
+        "page.h": "c",
+        "pagedir.h": "c",
+        "syn-read.h": "c"
     }
 }

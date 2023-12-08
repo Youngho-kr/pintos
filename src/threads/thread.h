@@ -137,6 +137,7 @@ struct thread
 
     /* Proj 4 */
     struct hash vm;                     /* Hash table */
+    struct file *loaded_file;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
