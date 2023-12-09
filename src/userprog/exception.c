@@ -150,17 +150,26 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+//   printf("page fault %p\n", fault_addr);
+
   /* If valid address -> follow below flow
      Unvalid -> kill (f) or sys_exit(-1) */
   if(!not_present)
    sys_exit(-1);
 
-  struct vm_entry *vme = find_vme(fault_addr);
-  if (vme == NULL)
-   sys_exit(-1);
+//   printf("pf 1\n");
 
-  if(!handle_mm_fault(vme))
+  struct vm_entry *vme = find_vme(fault_addr);
+  if (vme == NULL) {
+   // printf("vme is NULL\n");
    sys_exit(-1);
+  }
+//   printf("vme not NULL\n");
+
+  if(!handle_mm_fault(vme)) {
+   // printf("handle mm faulat FALSE\n");
+   sys_exit(-1);
+  }
 
   return;
 

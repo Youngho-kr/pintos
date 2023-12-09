@@ -161,6 +161,10 @@ process_exit (void)
     }
   }  
 
+  for(int i = 0; i < cur->mapid; i++) {
+    sys_munmap(i);
+  }
+
   sema_up(&cur->sema_wait);
   sema_down(&cur->sema_exit);
   // printf("process exit3\n");
@@ -695,7 +699,23 @@ bool handle_mm_fault(struct vm_entry *vme) {
         return false;
       }
       vme->is_loaded = true;
+      break;
+    case VM_FILE:
+      if (!load_file(kpage, vme)) {
+          palloc_free_page (kpage);
+          vme->is_loaded = false;
+          return false;
+        }
+        if (!install_page(vme->vaddr, kpage, vme->writeable)) {
+          palloc_free_page (kpage);
+          vme->is_loaded = false;
+          return false;
+        }
+        vme->is_loaded = true;
+      break;
   }
+
+  // printf("find true\n");
 
   return true;
 }

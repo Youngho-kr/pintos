@@ -137,7 +137,9 @@ struct thread
 
     /* Proj 4 */
     struct hash vm;                     /* Hash table */
-    struct file *loaded_file;
+    struct file *loaded_file;           /* Buf fix for syn-read, syn-write*/
+    int mapid;                          /* mmap id */
+    struct list mmap_list;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

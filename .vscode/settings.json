@@ -5,6 +5,10 @@
         "file.h": "c",
         "page.h": "c",
         "pagedir.h": "c",
-        "syn-read.h": "c"
+        "syn-read.h": "c",
+        "*.inc": "c",
+        "lib.h": "c",
+        "main.h": "c",
+        "syscall.h": "c"
     }
 }

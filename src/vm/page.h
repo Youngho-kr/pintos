@@ -26,7 +26,7 @@ struct vm_entry {
     bool is_loaded;
     struct file* vm_file;
 
-    // struct list_elem mmap_elem;
+    struct list_elem mmap_elem;
 
     size_t offset;
     size_t read_bytes;
@@ -34,12 +34,12 @@ struct vm_entry {
 
     // size_t swap_slot;
 
-    struct hash_elem elem;
+    struct hash_elem hash_elem;
 };
 
 struct mmap_file {
     int mapid;
-    struct file *file;
+    struct file *mm_file;
     struct list_elem elem;
     struct list vme_list;
 };

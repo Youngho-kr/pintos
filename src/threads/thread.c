@@ -702,6 +702,10 @@ init_thread (struct thread *t, const char *name, int priority)
   /* Child list init */
   list_init(&t->child_list);
 
+  /* Init for mmap */
+  list_init(&t->mmap_list);
+  t->mapid = 0;
+
   /* Initialize fd */
   for(int i = 0; i < MAX_FD; i++) {
     t->fd[i] = NULL;

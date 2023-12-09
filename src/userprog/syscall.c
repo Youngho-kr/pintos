@@ -25,8 +25,8 @@ void sys_seek (int fd, unsigned position);
 unsigned sys_tell (int fd);
 void sys_close (int fd);
 int sys_mmap (int fd, void *addr);
-void sys_munmap (struct vm_entry *vme);
-
+void sys_munmap (int mapid);
+void do_munmap(struct mmap_file *mmap_file);
 /*
    All file system call have check file descriptor is valid
    Check fd < 2 or fd > MAX_FD
@@ -153,8 +153,6 @@ bool sys_remove(const char *file) {
 */
 int sys_open(const char *file) {
   // checkPtr(file);
-
-  // printf("%s\n", file);
   lock_acquire(&syscall_lock);
   
   struct thread *cur = thread_current();
@@ -170,8 +168,6 @@ int sys_open(const char *file) {
   }
 
   cur->fd[idx] = filesys_open(file);
-
-  // printf("%p\n", cur->fd[idx]);
 
   if(cur->fd[idx] == NULL) {
     lock_release(&syscall_lock);
@@ -283,19 +279,113 @@ void sys_close(int fd) {
 }
 /* Mapping file to virtual memory */
 int sys_mmap (int fd, void *addr) {
+  if (addr == NULL || (int)addr % PGSIZE != 0) 
+    return -1;
+
   if (fd < 2 || fd >= MAX_FD)
-    sys_exit(-1);
+    return -1;
 
-  struct thread *t = thread_current();
-  if (t->fd[fd] == NULL)
-    sys_exit(-1);
+  struct file *file = thread_current()->fd[fd];
+  if(file == NULL)
+    return -1;
 
-  struct mmap_file *map_file;
-  struct file *file = file_reopen(file);
+  struct mmap_file *mmap_file = (struct mmap_file *)malloc(sizeof(struct mmap_file));
+  if (mmap_file == NULL)
+    return -1;
+  mmap_file->mm_file = file_reopen(file);
+  mmap_file->mapid = thread_current()->mapid++;
+  list_init(&mmap_file->vme_list);
 
-  
+  int file_len = file_length(mmap_file->mm_file);
+  int offset = 0;
+  int read_bytes;
+  int zero_bytes;
+  // printf("filelen: %d, PGSIZE: %d\n", file_len, PGSIZE);
+  while (file_len > 0) {
+    if (file_len >= PGSIZE) {
+      read_bytes = PGSIZE;
+      zero_bytes = 0;
+    }
+    else {
+      read_bytes = file_len;
+      zero_bytes = PGSIZE - file_len;
+    }
+
+    if (find_vme(addr) != NULL) {
+      sys_munmap(mmap_file->mapid);
+      return -1;
+    }
+    struct vm_entry *vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
+
+    vme->type = VM_FILE;
+    vme->vaddr = addr;
+    vme->writeable = true;
+    vme->is_loaded = false;
+    vme->vm_file = mmap_file->mm_file;
+    vme->offset = offset;
+    vme->read_bytes = read_bytes;
+    vme->zero_bytes = zero_bytes;
+
+    if(!insert_vme(&thread_current()->vm, vme))
+      return -1;
+
+    list_push_back(&mmap_file->vme_list, &vme->mmap_elem);
+
+    file_len -= read_bytes;
+    offset += read_bytes;
+    addr += PGSIZE;
+  }
+
+  list_push_back(&thread_current()->mmap_list, &mmap_file->elem);
+
+  return mmap_file->mapid;
 }
-void sys_munmap (struct vm_entry *vme) {
+void sys_munmap (int mapid) {
+  struct thread *cur = thread_current();
+  struct list_elem *e;
+  for(e = list_begin(&cur->mmap_list);
+      e != list_end(&cur->mmap_list);
+      )
+      {
+        struct mmap_file *mmap_file = list_entry(e, struct mmap_file, elem);
+        if(mmap_file->mapid == mapid) {
+          do_munmap(mmap_file);
+          e = list_remove(&mmap_file->elem);
+          free(mmap_file);
+        }
+        else {
+          e = list_next(e);
+        }
+      }
+}
+void do_munmap(struct mmap_file *mmap_file) {
+  struct thread *cur = thread_current();
+  struct list_elem *e;
+  for(e = list_begin(&mmap_file->vme_list);
+      e != list_end(&mmap_file->vme_list);
+      )
+      {
+        // printf("do munmap\n");
+        struct vm_entry *vme = list_entry(e, struct vm_entry, mmap_elem);
+        // printf("do munmap find %d\n", vme->read_bytes);
+        // if(vme->is_loaded) {
+          if(pagedir_is_dirty(cur->pagedir, vme->vaddr)) {
+            // lock_acquire(&syscall_lock);
+            file_write_at(vme->vm_file, vme->vaddr, vme->read_bytes, vme->offset);
+            // lock_release(&syscall_lock);
+          }
+          // palloc_free_page(pagedir_get_page(cur->pagedir, vme->vaddr));
+        // }
+        e = list_remove(&vme->mmap_elem);
+        delete_vme(&cur->vm, vme);
+        free(vme);
+        // printf("do munmap free\n");
+      }
+
+  // lock_acquire(&syscall_lock);
+  // file_close(mmap_file->mm_file);
+  // lock_release(&syscall_lock);
+  // printf("end do munmap\n");
 
 }
 
@@ -304,8 +394,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 {
   check_address(f->esp);
 
-  // printf("syscall_handler\n");
-
+  // printf("syscall handler\n");
   // hex_dump(f->esp, f->esp, 100, 1);
 
   switch(*(int *)(f->esp)) {
@@ -397,11 +486,13 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_MMAP:                   /* Map a file into memory. */
       check_address((void *)(f->esp + 4));
       check_address((void *)(f->esp + 8));
-      check_address(*(void **)(f->esp + 8));
-      f->eax = sys_mmap(*(int *)(f->esp + 4), *(void **)(f->esp));
+      // check_valid_string(*(void **)(f->esp + 8));
+      f->eax = sys_mmap(*(int *)(f->esp + 4), *(void **)(f->esp + 8));
+      break;
     case SYS_MUNMAP:                 /* Remove a memory mapping. */
       check_address((void *)(f->esp + 4));
-      sys_munmap(*(void **)(f->esp + 4));
+      sys_munmap(*(int *)(f->esp + 4));
+      break;
     /* Project 4 only. */
     case SYS_CHDIR:                  /* Change the current directory. */
     case SYS_MKDIR:                  /* Create a directory. */
